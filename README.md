@@ -24,8 +24,40 @@ via the Anthropic-compatible route) can talk to it with nothing but a base URL.
 It also generates images, and ships with a web dashboard so you can watch
 latency, sessions, and logs live.
 
-> **Use it responsibly.** Duck.ai bans by IP. A ban is persistent and has no
-> cooldown — see [Proxies](#proxies-and-bans) before you run this at volume.
+---
+
+## Before you use this
+
+Read this section before you install anything.
+
+**This is an unofficial project. It is not affiliated with, endorsed by, or
+sponsored by Duck.ai or DuckDuckGo.**
+
+Duck.ai publishes no public API. This project works by driving the ordinary
+web interface in a real browser — it types into the composer and reads the
+page. That is automation of a consumer site, which is exactly the kind of thing
+terms of service tend to prohibit. Whether you may do it is between you and
+Duck.ai, not something this README can grant you. **If using it would violate
+Duck.ai's Terms of Service, or the law where you live, don't use it.**
+
+Concretely, you accept that:
+
+- **You can be banned, and the ban is permanent.** Duck.ai bans by IP. A ban
+  means `418 ERR_BN_LIMIT` on every future request, with no `Retry-After` and
+  no cooldown. Nobody can lift it for you. If Duck.ai bans the IP you run this
+  from, that is your problem to solve, and it may be unsolvable.
+- **Bans can land on people who did nothing.** On shared, mobile, campus, or
+  corporate IPs, someone else's volume can get your address blocked.
+- **The browser is the real product.** If Duck.ai changes its page, this breaks.
+  It breaks on their schedule, not yours, and there is no support SLA.
+- **"Free" is not a licence.** That Duck.ai costs you nothing to use does not
+  make automated use permitted. Don't read an absence of restriction as consent.
+- **The maintainers accept no liability** for bans, blocked accounts, lost
+  access, or any claim arising from your use of this. See [License](#license).
+
+If any of that is a problem for you, the honest answer is: don't run this at
+volume, and don't run it on an IP you can't afford to lose. If you need a
+supported API, use a provider that offers one.
 
 ---
 
@@ -162,6 +194,10 @@ Duck.ai issues a **persistent per-IP ban** — you get `418 ERR_BN_LIMIT` on the
 very next request, with no `Retry-After` and no cooldown. The only real fix is
 a pool of clean exits. Residential and SOCKS5 proxies work best; datacenter IPs
 get banned fast.
+
+This section is about diagnosing an IP that is *already* blocked, not about
+avoiding bans. Read [Before you use this](#before-you-use-this) first — a proxy
+pool changes whose problem a ban is, not whether you have one.
 
 ```ini
 DUCKAI_PROXIES=http://user:pass@host1:8080,socks5://host2:1080
@@ -407,6 +443,10 @@ duckapi/
 
 MIT — see [LICENSE](LICENSE).
 
-You are responsible for complying with Duck.ai's terms of service and with the
-law in your jurisdiction. The maintainers accept no liability for bans, blocked
+The MIT license covers the source code, and nothing else. It is not a grant of
+rights from Duck.ai, and it cannot be — Duck.ai is not a party to it. Read
+[Before you use this](#before-you-use-this): the code is MIT-licensed, your use
+of Duck.ai through it is not something this project can license to you. You are
+responsible for complying with Duck.ai's terms of service and with the law in
+your jurisdiction. The maintainers accept no liability for bans, blocked
 accounts, or any use of this project.
