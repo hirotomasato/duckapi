@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuckAI2API</title>
+<style>
+  :root {
+    --bg: #08090c;
+    --surface: #0e1014;
+    --surface-2: #14171d;
+    --line: #1e222a;
+    --line-soft: #171a20;
+    --fg: #e8eaed;
+    --fg-dim: #9aa3b0;
+    --fg-faint: #5d6672;
+    --accent: #5b8cff;
+    --accent-dim: #3d63b8;
+    --ok: #35c88a;
+    --warn: #e0a83a;
+    --bad: #f2555a;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+    --r: 10px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Ambient wash so the page isn't a flat void */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(900px 400px at 15% -10%, rgba(91,140,255,.09), transparent 70%),
+      radial-gradient(700px 300px at 90% 0%, rgba(53,200,138,.05), transparent 70%);
+  }
+  .wrap { position: relative; z-index: 1; }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 26px; border-bottom: 1px solid var(--line);
+    background: rgba(8,9,12,.82); backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(53,200,138,.14), 0 0 12px rgba(53,200,138,.5);
+    animation: pulse 2.6s ease-in-out infinite;
+  }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(242,85,90,.14), 0 0 12px rgba(242,85,90,.5); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+  h1 { font-size: 14px; margin: 0; font-weight: 620; letter-spacing: -.1px; }
+  .uptime { color: var(--fg-faint); font: 12px var(--mono); }
+  .spacer { flex: 1; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px;
+    font: 600 11px/1.6 var(--mono); letter-spacing: .1px;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .pill.ok { background: rgba(53,200,138,.1); color: var(--ok); border-color: rgba(53,200,138,.25); }
+  .pill.bad { background: rgba(242,85,90,.1); color: var(--bad); border-color: rgba(242,85,90,.28); }
+  .pill.idle { background: var(--surface-2); color: var(--fg-dim); border-color: var(--line); }
+  .pill.warn { background: rgba(224,168,58,.1); color: var(--warn); border-color: rgba(224,168,58,.25); }
+
+  button {
+    font: 500 13px var(--sans); padding: 6px 13px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--fg);
+    cursor: pointer; transition: background .14s, border-color .14s, transform .08s;
+  }
+  button:hover:not(:disabled) { background: #1c2027; border-color: #2a2f39; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 580;
+    box-shadow: 0 0 0 1px rgba(91,140,255,.2), 0 4px 14px -4px rgba(91,140,255,.5);
+  }
+  button.primary:hover:not(:disabled) { background: #6d99ff; border-color: #6d99ff; }
+  button.danger { color: var(--bad); border-color: rgba(242,85,90,.3); }
+  button.danger:hover { background: rgba(242,85,90,.1); }
+
+  /* ---------- tabs ---------- */
+  nav {
+    display: flex; gap: 2px; padding: 0 26px; position: sticky; top: 51px; z-index: 19;
+    border-bottom: 1px solid var(--line); background: rgba(8,9,12,.82); backdrop-filter: blur(12px);
+  }
+  nav button {
+    border: none; border-radius: 0; background: none; color: var(--fg-faint);
+    padding: 12px 15px; font-weight: 500; position: relative;
+    transition: color .14s;
+  }
+  nav button:hover { background: none; color: var(--fg-dim); }
+  nav button.on { color: var(--fg); }
+  nav button.on::after {
+    content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+    background: var(--accent); border-radius: 2px 2px 0 0;
+    box-shadow: 0 0 10px rgba(91,140,255,.7);
+  }
+
+  main { padding: 26px; max-width: 1200px; margin: 0 auto; }
+  .hidden { display: none; }
+
+  /* ---------- cards ---------- */
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-bottom: 20px; }
+  .card {
+    position: relative; background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 17px 19px;
+  }
+  /* top hairline highlight - the "gradient border" feel without heavy borders */
+  .card::before {
+    content: ''; position: absolute; inset: 0 0 auto 0; height: 1px; border-radius: var(--r) var(--r) 0 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.07) 30%, rgba(255,255,255,.07) 70%, transparent);
+  }
+  .card h3 {
+    margin: 0 0 13px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--fg-faint); font-weight: 600;
+  }
+  .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 3.5px 0; font-size: 13px; }
+  .kv > span:first-child { color: var(--fg-dim); }
+  .kv > span:last-child { font-family: var(--mono); font-size: 12.5px; text-align: right; word-break: break-all; }
+
+  /* hero stat */
+  .hero { display: flex; align-items: baseline; gap: 7px; margin-bottom: 3px; }
+  .hero .num { font: 600 30px/1 var(--mono); letter-spacing: -1.2px; }
+  .hero .unit { color: var(--fg-faint); font-size: 12px; font-family: var(--mono); }
+
+  /* ---------- table ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 8px 12px; color: var(--fg-faint);
+    font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .6px;
+    border-bottom: 1px solid var(--line);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+  tr:last-child td { border-bottom: none; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover { background: rgba(255,255,255,.018); }
+  .empty { color: var(--fg-faint); padding: 30px; text-align: center; font-size: 13px; }
+
+  /* ---------- forms ---------- */
+  textarea, select {
+    width: 100%; font: 13px var(--mono); background: #0a0c0f; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px;
+    transition: border-color .14s, box-shadow .14s;
+  }
+  textarea { resize: vertical; min-height: 88px; line-height: 1.6; }
+  textarea:focus, select:focus {
+    outline: none; border-color: var(--accent-dim);
+    box-shadow: 0 0 0 3px rgba(91,140,255,.1);
+  }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .row select { width: auto; min-width: 220px; }
+
+  /* ---------- chat layout ---------- */
+  .chatframe { display: grid; grid-template-columns: 232px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 780px) { .chatframe { grid-template-columns: 1fr; } .chatside { display: none; } }
+
+  .chatside {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r); overflow: hidden;
+    position: sticky; top: 108px;
+  }
+  .side-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 13px; border-bottom: 1px solid var(--line);
+    font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .7px; color: var(--fg-faint);
+  }
+  .side-head button { padding: 3px 9px; font-size: 11.5px; }
+  #threads { max-height: 62vh; overflow-y: auto; padding: 6px; }
+  #threads::-webkit-scrollbar { width: 8px; }
+  #threads::-webkit-scrollbar-thumb { background: #232830; border-radius: 4px; }
+  .thread {
+    padding: 8px 10px; border-radius: 7px; cursor: pointer; margin-bottom: 2px;
+    transition: background .12s; border: 1px solid transparent;
+  }
+  .thread:hover { background: var(--surface-2); }
+  .thread.on { background: rgba(91,140,255,.1); border-color: rgba(91,140,255,.25); }
+  .thread .tt { font-size: 12.5px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thread.on .tt { color: #fff; }
+  .thread .tm { font: 11px var(--mono); color: var(--fg-faint); margin-top: 2px; }
+  .side-empty { padding: 22px 12px; text-align: center; color: var(--fg-faint); font-size: 12px; }
+
+  .chatmain {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+    display: flex; flex-direction: column; min-height: 72vh; overflow: hidden;
+  }
+  .chathead {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); background: rgba(255,255,255,.014);
+  }
+  .chathead select { width: auto; min-width: 200px; }
+
+  /* chat vs image toggle */
+  .modes { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+  .modes button {
+    padding: 4px 12px; border: none; background: none; color: var(--fg-faint);
+    border-radius: 6px; font-size: 12px; font-weight: 550; cursor: pointer;
+  }
+  .modes button:hover { color: var(--fg); }
+  .modes button.on { background: var(--accent); color: #fff; }
+
+  /* generated image sits inside a bot bubble, full width of the column */
+  .msg .shot {
+    display: block; max-width: 100%; border-radius: 11px; margin-top: 2px;
+    border: 1px solid var(--line); background: var(--surface-2);
+  }
+  .msg.bot.pending .bubble { color: var(--fg-faint); font-style: italic; }
+  /* The revised prompt can run to several sentences. Clamp it to two lines and
+     let the full text live in the title attribute, so the meta row can never
+     grow tall enough to push the composer off the panel. */
+  .msg .meta.clamp {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
+  }
+
+  #chatlog { flex: 1; overflow-y: auto; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+  #chatlog::-webkit-scrollbar { width: 9px; }
+  #chatlog::-webkit-scrollbar-thumb { background: #232830; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+
+  .welcome { margin: auto; text-align: center; padding: 30px; }
+  .wicon {
+    width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 17px; color: var(--accent);
+    background: rgba(91,140,255,.1); border: 1px solid rgba(91,140,255,.25);
+  }
+  .welcome h2 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .welcome p { margin: 0; color: var(--fg-faint); font-size: 13px; }
+
+  /* bubbles */
+  .msg { display: flex; gap: 11px; max-width: 82%; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .av {
+    width: 27px; height: 27px; border-radius: 8px; flex-shrink: 0; margin-top: 1px;
+    display: grid; place-items: center; font-size: 11px; font-weight: 650;
+  }
+  .msg.user .av { background: linear-gradient(135deg, #5b8cff, #3d63b8); color: #fff; }
+  .msg.bot .av { background: var(--surface-2); color: var(--accent); border: 1px solid var(--line); }
+  .msg .body { min-width: 0; }
+  .msg .bubble {
+    padding: 10px 14px; border-radius: 13px; white-space: pre-wrap; word-break: break-word;
+    line-height: 1.6; font-size: 13.5px;
+  }
+  .msg.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot .bubble { background: var(--surface-2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg .meta { font: 11px var(--mono); color: var(--fg-faint); margin-top: 5px; }
+  .msg.user .meta { text-align: right; }
+  .msg.bot.streaming .bubble::after {
+    content: '▋'; color: var(--accent); animation: blink 1s steps(2) infinite; margin-left: 1px;
+  }
+  @keyframes blink { 50% { opacity: 0 } }
+  .msg.err .bubble { background: rgba(242,85,90,.08); border: 1px solid rgba(242,85,90,.35); color: var(--bad); font: 13px var(--mono); }
+  .msg .copy {
+    opacity: 0; margin-top: 5px; font: 11px var(--mono); color: var(--fg-faint);
+    background: none; border: none; padding: 2px 6px; cursor: pointer;
+  }
+  .msg:hover .copy { opacity: 1; }
+  .msg .copy:hover { color: var(--accent); background: none; }
+
+  .composer { border-top: 1px solid var(--line); padding: 12px 16px 16px; background: rgba(255,255,255,.012); }
+  .cbox {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: #0a0c0f; border: 1px solid var(--line); border-radius: 13px;
+    padding: 10px 10px 10px 15px; transition: border-color .14s, box-shadow .14s;
+  }
+  .cbox:focus-within { border-color: var(--accent-dim); box-shadow: 0 0 0 3px rgba(91,140,255,.1); }
+  .cbox textarea {
+    border: none; background: none; padding: 0; resize: none; min-height: 24px; max-height: 200px;
+    line-height: 1.6;
+  }
+  .cbox textarea:focus { box-shadow: none; border: none; }
+  .cbox .send { width: 34px; height: 34px; padding: 0; border-radius: 9px; flex-shrink: 0; display: grid; place-items: center; }
+  .timing { font: 12px var(--mono); color: var(--fg-faint); padding: 0 4px 8px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .timing b { color: var(--ok); font-weight: 600; }
+  .timing .sep { color: var(--line); }
+
+  /* ---------- logs ---------- */
+  #logbox {
+    background: #060709; border: 1px solid var(--line); border-radius: var(--r);
+    padding: 13px 15px; height: 62vh; overflow-y: auto;
+    font: 12px/1.65 var(--mono);
+  }
+  #logbox::-webkit-scrollbar, textarea::-webkit-scrollbar { width: 9px; height: 9px; }
+  #logbox::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb {
+    background: #232830; border-radius: 5px; border: 2px solid transparent; background-clip: content-box;
+  }
+  .lg { display: flex; gap: 12px; padding: .5px 0; }
+  .lg .t { color: #40474f; flex-shrink: 0; }
+  .lg .lv { flex-shrink: 0; width: 52px; font-weight: 600; }
+  .lg .m { color: #c9d1d9; word-break: break-word; }
+  .lv.INFO { color: var(--accent); } .lv.WARNING { color: var(--warn); }
+  .lv.ERROR, .lv.CRITICAL { color: var(--bad); } .lv.DEBUG { color: var(--fg-faint); }
+
+  .sub { color: var(--fg-faint); font: 12px var(--mono); }
+  @media (max-width: 600px) {
+    header, nav, main { padding-left: 16px; padding-right: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <span class="dot" id="dot"></span>
+    <h1>DuckAI2API</h1>
+  </div>
+  <span class="uptime" id="uptime">—</span>
+  <span class="spacer"></span>
+  <span class="pill idle" id="conn">connecting…</span>
+  <button class="danger" id="stop">Stop server</button>
+</header>
+
+<nav>
+  <button class="on" data-tab="status">Status</button>
+  <button data-tab="chat">Playground</button>
+  <button data-tab="logs">Logs</button>
+  <button data-tab="models">Models</button>
+</nav>
+
+<main>
+  <section id="tab-status">
+    <div class="grid">
+      <div class="card">
+        <h3>Latency</h3>
+        <div class="hero">
+          <span class="num" id="h-turn">—</span>
+          <span class="unit">per turn</span>
+        </div>
+        <div class="kv"><span>first token</span><span id="h-first">—</span></div>
+        <div class="kv"><span>tokens</span><span id="h-tok">—</span></div>
+        <div class="kv" style="margin-top:6px"><span>baseline 9/28</span><span>10.3s / turn</span></div>
+      </div>
+      <div class="card">
+        <h3>Server</h3>
+        <div class="kv"><span>Uptime</span><span id="s-up">—</span></div>
+        <div class="kv"><span>Port</span><span id="s-port">—</span></div>
+        <div class="kv"><span>Auth</span><span id="s-auth">—</span></div>
+        <div class="kv"><span>Model</span><span id="s-model">—</span></div>
+        <div class="kv"><span>New chat</span><span id="s-nc">—</span></div>
+      </div>
+      <div class="card">
+        <h3>Warmup</h3>
+        <div class="kv"><span>Min floor</span><span id="s-wmin">—</span></div>
+        <div class="kv"><span>Max budget</span><span id="s-wmax">—</span></div>
+        <div class="kv"><span>Startup prewarm</span><span id="s-pw">—</span></div>
+        <div class="kv"><span>Tool routing</span><span id="s-tr">—</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Browser sessions</h3>
+      <div id="sessions"><div class="empty">Loading…</div></div>
+    </div>
+  </section>
+
+  <section id="tab-chat" class="hidden">
+    <div class="chatframe">
+      <aside class="chatside">
+        <div class="side-head">
+          <span>Conversations</span>
+          <button id="newchat" title="New conversation">+ New</button>
+        </div>
+        <div id="threads"></div>
+      </aside>
+
+      <div class="chatmain">
+        <div class="chathead">
+          <div class="modes" id="modes">
+            <button class="on" data-mode="chat">Chat</button>
+            <button data-mode="image">Image</button>
+          </div>
+          <select id="model"></select>
+          <select id="size" class="hidden">
+            <option value="">Auto size</option>
+            <option value="1024x1024">1024 × 1024</option>
+            <option value="1536x1024">1536 × 1024</option>
+            <option value="1024x1536">1024 × 1536</option>
+          </select>
+          <span class="spacer"></span>
+          <span class="sub" id="chatmeta"></span>
+        </div>
+
+        <div id="chatlog">
+          <div class="welcome" id="welcome">
+            <div class="wicon">◆</div>
+            <h2>Duck.ai playground</h2>
+            <p>Chat through the relay and watch the latency in real time.</p>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="timing" id="timing"></div>
+          <div class="cbox">
+            <textarea id="prompt" rows="1" placeholder="Send a message…  (Enter to send, Shift+Enter for newline)">Reply with exactly one word: PONG</textarea>
+            <button class="primary send" id="send" title="Send">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14V2M3 7l5-5 5 5"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-logs" class="hidden">
+    <div class="row">
+      <select id="lvl">
+        <option value="ALL">All levels</option>
+        <option value="INFO">Info+</option>
+        <option value="WARNING">Warning+</option>
+        <option value="ERROR">Errors only</option>
+      </select>
+      <button id="refresh">Refresh</button>
+      <span class="sub" id="lcount"></span>
+    </div>
+    <div id="logbox"></div>
+  </section>
+
+  <section id="tab-models" class="hidden">
+    <div class="card"><div id="models"><div class="empty">Loading…</div></div></div>
+  </section>
+</main>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dur = (s) => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+
+// Same-process proxy, so a configured API key goes out as a Bearer header
+// exactly like any other client would send it.
+async function api(path, opts = {}) {
+  const key = localStorage.getItem('duckapi_key') || '';
+  const headers = Object.assign({}, opts.headers || {});
+  if (key) headers['Authorization'] = 'Bearer ' + key;
+  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  if (r.status === 401) throw new Error('Unauthorized — set the API key below');
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r;
+}
+// opts must be forwarded: apiJSON is used for POSTs too, and dropping the
+// second argument silently turns them into GETs (which 405 against a
+// POST-only route).
+const apiJSON = (p, opts) => api(p, opts).then(r => r.json());
+
+let active = 'status';
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  active = b.dataset.tab;
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+  $('tab-' + active).classList.remove('hidden');
+  if (active === 'models') loadModels();
+  if (active === 'logs') loadLogs();
+});
+
+// ---------- status ----------
+async function loadStatus() {
+  let d;
+  try { d = await apiJSON('/api/status'); } catch (e) { return setConn('bad', e.message); }
+  setConn('ok', 'connected');
+  $('uptime').textContent = `up ${dur(d.uptime_s)}`;
+  $('s-up').textContent = dur(d.uptime_s);
+  $('s-port').textContent = d.port;
+  $('s-auth').textContent = d.auth_required ? 'API key required' : 'open';
+  $('s-model').textContent = d.config.default_model;
+  $('s-nc').textContent = d.config.new_chat ? 'always fresh' : 'reuse session';
+  $('s-wmin').textContent = d.warm.min_s + 's';
+  $('s-wmax').textContent = d.warm.max_s + 's';
+  $('s-pw').textContent = d.warm.prewarm ? 'on' : 'off';
+  $('s-tr').textContent = d.config.tool_routing ? 'on' : 'off';
+
+  const rows = d.sessions;
+  const banned = rows.some(s => s.banned);
+  $('dot').classList.toggle('bad', banned);
+  $('sessions').innerHTML = rows.length ? `<table>
+    <tr><th>Model</th><th>Proxy</th><th>Browser</th><th>Page</th><th>Age</th></tr>
+    ${rows.map(s => `<tr>
+      <td class="mono">${esc(s.model)}</td>
+      <td class="mono">${esc(s.proxy)}</td>
+      <td>${s.banned ? '<span class="pill bad">banned</span>'
+             : s.ready ? '<span class="pill ok">ready</span>'
+             : '<span class="pill idle">cold</span>'}</td>
+      <td>${s.page_open ? '<span class="pill ok">open</span>' : '<span class="pill idle">none</span>'}</td>
+      <td class="mono">${s.page_age_s == null ? '—' : s.page_age_s + 's'}</td>
+    </tr>`).join('')}</table>` : '<div class="empty">No sessions yet — send a chat to create one.</div>';
+}
+
+function setConn(cls, text) {
+  const p = $('conn');
+  p.className = 'pill ' + cls;
+  p.textContent = text;
+  if (cls === 'bad') $('dot').classList.add('bad');
+}
+
+// ---------- playground ----------
+// Threads live in localStorage: a page reload shouldn't lose a conversation.
+const LS = 'duckapi_threads';
+let threads = [];
+let current = -1;
+
+const welcomeHTML = () => '<div class="welcome"><div class="wicon">◆</div>' +
+  '<h2>Duck.ai playground</h2><p>Chat through the relay and watch the latency in real time.</p></div>';
+
+// Restore past conversations. Wrapped because a corrupt/hand-edited value
+// should cost you the history, not the whole page script.
+try { threads = JSON.parse(localStorage.getItem(LS) || '[]') || []; } catch { threads = []; }
+if (!Array.isArray(threads)) threads = [];
+
+function save() { localStorage.setItem(LS, JSON.stringify(threads)); }
+
+function renderThreads() {
+  const box = $('threads');
+  if (!threads.length) {
+    box.innerHTML = '<div class="side-empty">No conversations yet.</div>';
+    return;
+  }
+  box.innerHTML = threads.map((t, i) => {
+    const when = new Date(t.updated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `<div class="thread${i === current ? ' on' : ''}" data-i="${i}">
+      <div class="tt">${esc(t.title)}</div>
+      <div class="tm">${t.msgs.length} msg · ${when}</div>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('.thread').forEach(el => el.onclick = () => openThread(+el.dataset.i));
+}
+
+function openThread(i) {
+  current = i;
+  renderThreads();
+  const log = $('chatlog');
+  const t = threads[i];
+  if (!t) return;
+  log.innerHTML = t.msgs.map((m, idx) =>
+    `<div class="msg ${m.role === 'user' ? 'user' : 'bot'}">
+       <div class="av">${m.role === 'user' ? 'You' : '◆'}</div>
+       <div class="body">
+         ${m.img
+            ? `<img class="shot" alt="generated image" src="data:image/jpeg;base64,${m.img}">`
+            : `<div class="bubble">${esc(m.text)}</div>`}
+         ${m.stats ? `<div class="meta${m.img ? ' clamp' : ''}"${m.img ? ` title="${esc(m.stats)}"` : ''}>${esc(m.stats)}</div>` : ''}
+         <button class="copy" data-idx="${idx}">${m.img ? 'download' : 'copy'}</button>
+       </div>
+     </div>`).join('') || welcomeHTML();
+  // data-idx, not the button's own position: a download button sits on a
+  // different subset of messages than a copy button, so counting buttons
+  // would read the wrong message.
+  log.querySelectorAll('.copy').forEach(b => b.onclick = (e) => {
+    const m = t.msgs[+e.target.dataset.idx];
+    if (m.img) {
+      const a = document.createElement('a');
+      a.href = 'data:image/jpeg;base64,' + m.img;
+      a.download = 'duckai-' + m.updated + '.jpg';
+      a.click();
+      return;
+    }
+    navigator.clipboard.writeText(m.text || '');
+    e.target.textContent = 'copied';
+    setTimeout(() => e.target.textContent = 'copy', 1200);
+  });
+  log.scrollTop = log.scrollHeight;
+  $('chatmeta').textContent = t.model || '';
+}
+
+function newThread() {
+  threads.unshift({ title: 'New chat', msgs: [], model: $('model').value, updated: Date.now() });
+  save();
+  current = 0;
+  renderThreads();
+  $('chatlog').innerHTML = welcomeHTML();
+  $('timing').textContent = '';
+  $('chatmeta').textContent = '';
+}
+$('newchat').onclick = newThread;
+
+function pushMsg(role, text, stats, img) {
+  if (current < 0) newThread();
+  const t = threads[current];
+  t.msgs.push({ role, text, stats, img });
+  t.updated = Date.now();
+  if (t.msgs.filter(m => m.role === 'user').length === 1) {
+    t.title = text.slice(0, 40) + (text.length > 40 ? '…' : '');
+  }
+  save();
+}
+
+function bubble(role, text) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+  el.innerHTML = `<div class="av">${role === 'user' ? 'You' : '◆'}</div>
+    <div class="body"><div class="bubble"></div><div class="meta"></div><button class="copy">copy</button></div>`;
+  el.querySelector('.bubble').textContent = text;
+  el.querySelector('.copy').onclick = (e) => {
+    navigator.clipboard.writeText(text);
+    e.target.textContent = 'copied';
+    setTimeout(() => e.target.textContent = 'copy', 1200);
+  };
+  return el;
+}
+
+// Rendered into an existing bot bubble: swap the placeholder text for the image.
+function fillImage(bot, b64, seconds, revised) {
+  bot.querySelector('.bubble').remove();
+  const img = document.createElement('img');
+  img.className = 'shot';
+  img.alt = 'generated image';
+  img.src = 'data:image/jpeg;base64,' + b64;
+  const body = bot.querySelector('.body');
+  body.insertBefore(img, body.firstChild);
+
+  // Duration stays visible; the revised prompt goes to the tooltip. It is
+  // several sentences long and would otherwise dominate the whole panel.
+  const meta = bot.querySelector('.meta');
+  meta.textContent = seconds + 's';
+  if (revised) {
+    meta.classList.add('clamp');
+    meta.textContent += ' · ' + revised;
+    meta.title = revised;
+  }
+
+  const copy = bot.querySelector('.copy');
+  copy.textContent = 'download';
+  copy.onclick = () => {
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = 'duckai-' + Date.now() + '.jpg';
+    a.click();
+  };
+}
+
+const scrollDown = () => { const l = $('chatlog'); l.scrollTop = l.scrollHeight; };
+
+let mode = 'chat';
+
+$('modes').querySelectorAll('button').forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  $('modes').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  // Image gen always routes to Luna's GenerateImage tool, so the model picker
+  // would be a lie here - swap it for the size picker instead.
+  $('model').classList.toggle('hidden', mode === 'image');
+  $('size').classList.toggle('hidden', mode !== 'image');
+  $('prompt').placeholder = mode === 'image'
+    ? 'Describe the image…  (takes 15-20s)'
+    : 'Send a message…  (Enter to send, Shift+Enter for newline)';
+});
+
+function send() {
+  if (mode === 'image') return sendImage();
+  return sendChat();
+}
+
+async function sendImage() {
+  const prompt = $('prompt').value.trim();
+  if (!prompt) return;
+  if (current < 0) newThread();
+  $('chatlog').querySelector('.welcome')?.remove();
+
+  $('chatlog').appendChild(bubble('user', prompt));
+  const bot = bubble('bot', 'generating…');
+  bot.classList.add('pending');
+  $('chatlog').appendChild(bot);
+  scrollDown();
+  $('timing').textContent = 'generating image (15-20s)…';
+  $('send').disabled = true;
+  $('prompt').value = '';
+  autoGrow();
+
+  try {
+    const d = await apiJSON('/api/images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, size: $('size').value || null }),
+    });
+    bot.classList.remove('pending');
+    fillImage(bot, d.b64, d.seconds, d.revised_prompt);
+    $('timing').textContent = `image ready in ${d.seconds}s`;
+    pushMsg('user', prompt);
+    pushMsg('bot', '', d.revised_prompt ? `${d.seconds}s · ${d.revised_prompt}` : `${d.seconds}s`, d.b64);
+    renderThreads();
+  } catch (e) {
+    bot.classList.remove('pending');
+    bot.className = 'msg err';
+    bot.querySelector('.bubble').textContent = e.message;
+    $('timing').textContent = '';
+  } finally {
+    $('send').disabled = false;
+    loadStatus();
+  }
+}
+
+async function sendChat() {
+  const prompt = $('prompt').value.trim();
+  if (!prompt) return;
+  const model = $('model').value || 'default';
+  if (current < 0) newThread();
+  threads[current].model = model;
+  $('chatlog').querySelector('.welcome')?.remove();
+
+  $('chatlog').appendChild(bubble('user', prompt));
+  const bot = bubble('bot', '');
+  bot.classList.add('streaming');
+  $('chatlog').appendChild(bot);
+  scrollDown();
+  $('timing').textContent = 'waiting for first token…';
+  $('send').disabled = true;
+  $('prompt').value = '';
+  autoGrow();
+
+  let acc = '';
+  try {
+    const r = await api('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: true }),
+    });
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') continue;
+        const e = JSON.parse(payload);
+        if (e.type === 'token') {
+          acc += e.text;
+          bot.querySelector('.bubble').textContent = acc;
+          scrollDown();
+        } else if (e.type === 'done') {
+          bot.classList.remove('streaming');
+          const stats = `${e.first_token_s}s first · ${e.total_s}s total · ${e.tokens} tokens`;
+          bot.querySelector('.meta').textContent = stats;
+          $('timing').innerHTML =
+            `first token <b>${e.first_token_s}s</b><span class="sep">|</span>` +
+            `total <b>${e.total_s}s</b><span class="sep">|</span>${e.tokens} tokens`;
+          $('h-turn').textContent = e.total_s + 's';
+          $('h-first').textContent = e.first_token_s + 's';
+          $('h-tok').textContent = e.tokens;
+        } else if (e.type === 'error') {
+          bot.className = 'msg err';
+          bot.querySelector('.bubble').textContent = e.message;
+          $('timing').textContent = '';
+        }
+      }
+    }
+    bot.classList.remove('streaming');
+    if (!acc) bot.querySelector('.bubble').textContent = '(empty response)';
+    pushMsg('user', prompt);
+    pushMsg('bot', acc, bot.querySelector('.meta').textContent);
+    renderThreads();
+  } catch (e) {
+    bot.className = 'msg err';
+    bot.querySelector('.bubble').textContent = e.message;
+    $('timing').textContent = '';
+  } finally {
+    $('send').disabled = false;
+    loadStatus();
+  }
+}
+$('send').onclick = send;
+
+// Enter sends, Shift+Enter makes a newline. Composer grows with content.
+function autoGrow() {
+  const t = $('prompt');
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight, 200) + 'px';
+}
+$('prompt').addEventListener('input', autoGrow);
+$('prompt').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+autoGrow();
+
+async function loadModels() {
+  let d;
+  try { d = await apiJSON('/api/models'); } catch (e) { $('models').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  $('models').innerHTML = `<table>
+    <tr><th>ID</th><th>Name</th><th>Access</th><th>Reasoning</th><th>Images</th></tr>
+    ${d.data.map(m => `<tr>
+      <td class="mono">${esc(m.id)}</td>
+      <td>${esc(m.name)}</td>
+      <td>${m.access === 'free' ? '<span class="pill ok">free</span>' : '<span class="pill idle">'+esc(m.access)+'</span>'}</td>
+      <td class="mono">${esc((m.reasoning_effort || []).join(', ') || '—')}</td>
+      <td>${m.image_upload ? 'yes' : '—'}</td>
+    </tr>`).join('')}</table>`;
+  if (!$('model').options.length) {
+    $('model').innerHTML = d.data.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  }
+}
+
+// ---------- logs ----------
+const ORDER = { DEBUG: 10, INFO: 20, WARNING: 30, ERROR: 40, CRITICAL: 50 };
+async function loadLogs() {
+  let d;
+  try { d = await apiJSON('/api/logs?limit=300'); } catch (e) { return; }
+  const min = ORDER[$('lvl').value] || 0;
+  const recs = d.records.filter(r => (ORDER[r.level] || 20) >= min);
+  $('lcount').textContent = `${recs.length} / ${d.records.length} records`;
+  $('logbox').innerHTML = recs.map(r => `<div class="lg">
+    <span class="t">${esc(r.time)}</span>
+    <span class="lv ${esc(r.level)}">${esc(r.level)}</span>
+    <span class="m">${esc(r.message)}</span></div>`).join('');
+  $('logbox').scrollTop = $('logbox').scrollHeight;
+}
+$('lvl').onchange = loadLogs;
+$('refresh').onclick = loadLogs;
+
+// ---------- stop ----------
+$('stop').onclick = async () => {
+  if (!confirm('Stop the server? The dashboard goes away with it.')) return;
+  try {
+    await api('/api/shutdown', { method: 'POST' });
+    setConn('bad', 'stopping…');
+    document.querySelector('.wrap').innerHTML =
+      `<main><div class="empty" style="padding:100px 20px;font-size:14px">
+        Server stopped.<br><br>Restart with <code style="font-family:var(--mono);color:var(--fg)">python run.py</code>
+       </div></main>`;
+  } catch (e) { setConn('bad', e.message); }
+};
+
+// ---------- boot ----------
+loadStatus();
+loadModels();
+renderThreads();
+setInterval(loadStatus, 4000);
+setInterval(() => { if (active === 'logs') loadLogs(); }, 2000);
+</script>
+</body>
+</html>

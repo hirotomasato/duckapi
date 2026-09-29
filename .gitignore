@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Secrets / local config — never commit
+.env
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
